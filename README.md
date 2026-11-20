@@ -1,26 +1,20 @@
-# Yet another optimization challenge: the 0–1 knapsack problem and the hard instances
+# Knapsackp — 0-1 Knapsack Problem Solver & Parallel Randomization
 
-## Problem description
+> **Fork & Remediation Note:** This repository (`KenanToprak/Knapsackp`) is forked from an Eskişehir Technical University (ESTU) Java/Maven assignment (`salihberke/Knapsackp`). Upstream `main` is preserved untouched; audit fixes, complete solvers, and JUnit 6 tests live on branch `audit/fixes`.
 
-The [0–1 knapsack](https://www.sciencedirect.com/science/article/pii/S0925231223007531) problem (KP01) is a classical NP-hard combinatorial optimization problem.
-KP01 has many applications in real-world complex problems such as resource distribution, portfolio optimization, etc.
-In KP01 problem, one is given a knapsack with an _integer_ capacity and a **set** of  items, which each have an integer profit and an integer weight.
-The goal is to select a subset of items to put into the knapsack such that the total value is maximized and the total weight does not exceed the knapsack capacity.
+## Problem Description
 
-The task is to Design and Implement the following(s)
+The [0-1 knapsack](https://www.sciencedirect.com/science/article/pii/S0925231223007531) problem (`KP01`) is a classical NP-hard combinatorial optimization problem. Given a knapsack of integer capacity $c$ and a set of $n$ items—each with non-negative integer profit $p_i$ and weight $w_i$—the goal is to select a subset of items maximizing total profit such that total weight does not exceed $c$.
 
-Phase 1:  Create java class(es) to represent a 0–1 knapsack problem instance given in the format described in the [GitHub repository](https://github.com/JorikJooken/knapsackProblemInstances).
-A dataset of 3240 problem instances is made publicly available by [Jooken, Leyman, and De Causmaecker (2022)](https://www.sciencedirect.com/science/article/pii/S037722172101016X). 
-Each problem instance is distributed as a text file named *test.in*.
-The first line of the file represents the number of items, *n*. Each of the *n* following lines describe an item and contains 3 integers: 
-* the id of the item, 
-* the profit of the item and 
-* the weight of the item. 
-The last line contains an integer describing the knapsack capacity, *c*.
+### Input Format ([Jooken, Leyman, and De Causmaecker, 2022](https://www.sciencedirect.com/science/article/pii/S037722172101016X))
 
-For example, if the *test.in* file contains the following:
+- Line 1: number of items $n$
+- Next $n$ lines: `<id> <profit> <weight>` (64-bit `long` integers to support large instances)
+- Final line: knapsack capacity $c$
 
-```
+Example (`samples/test.in`):
+
+```text
 3
 1 3 8
 2 2 8
@@ -28,113 +22,51 @@ For example, if the *test.in* file contains the following:
 10
 ```
 
-This describes a problem instance in which there are *n*=3 items and the knapsack has a capacity of *c*=10.
-The item with id 1 has a profit of 3 and a weight of 8.
-The item with id 2 has a profit of 2 and a weight of 8.
-The item with id 3 has a profit of 9 and a weight of 1.
+## Implemented Components
 
-Hint: To represent an item, the following Record declaration could be used.
-Record classes, which are a special kind of class, help to model plain data aggregates with less ceremony than normal classes.
-A record declaration specifies in a header a description of its contents; the appropriate accessors, constructor, equals, hashCode, and toString methods are created automatically.
-A record's fields are final because the class is intended to serve as a simple "data carrier"; thus Record classes are immutable.
+- **`edu.estu.Item`**: Immutable Java 21 `record Item(long id, long profit, long weight)` validating non-negative profit and weight.
+- **`edu.estu.Solution`**: Immutable `record Solution(List<Item> selectedItems, long totalProfit, long totalWeight)` with overflow-safe totals and `isValid(KP01)` feasibility checking.
+- **`edu.estu.KP01`**:
+  - **Phase 1 — Model & Parser**: `KP01.fromFile(Path)` using UTF-8, `Locale.ROOT`, strict validation, and defensive unmodifiable copying (`Set<Item>`).
+  - **Phase 2 — Trivial Case Check**: Overflow-safe `KP01.trivial()` / `isTrivial()` checking whether all items fit simultaneously.
+  - **Phase 3 — Random & Greedy Solvers**:
+    - `generateRandomSolution()` / `generateRandomSolution(RandomGenerator)` for unbiased feasible random subsets.
+    - `greedySolution()` sorting descending by `profit / weight` using exact `BigInteger` cross-multiplication (no `long` multiplication overflow).
+  - **Exact 0-1 Solver**: `solveExact()` combining 0-1 dynamic programming (for bounded capacities) and iterative Branch-and-Bound with an overflow-safe fractional upper bound (for large `long` capacities).
+  - **Phase 4 & 5 — 1M Random Search (Sequential & Parallel)**: `oneMillionRandom()` and `oneMillionParallel()` using `ThreadLocalRandom` and `AtomicReference` without retaining all candidate solutions in memory.
+- **`edu.estu.App`**: CLI runner accepting an optional instance path (`args[0]`, defaulting to `samples/test.in`).
+- **`edu.estu.OneMillionRandom`**: Sequential, synchronized, and atomic (`AtomicInteger` / `AtomicReference`) parallel maximum-integer demonstrations with optional directory scan (`args[0]`).
 
-``` java
-public record Item(long id, long profit, long weight) { }
+## Prerequisites
+
+- **Java**: JDK 21 or newer (`pom.xml` targets Java 21 via `<maven.compiler.release>21</maven.compiler.release>`)
+- **Maven**: Apache Maven 3.9+ (or a locally cached Maven distribution)
+
+## Build, Test & Run
+
+### Using Maven
+
+```powershell
+# Compile and run all JUnit 6 unit & integration tests
+mvn clean test
+
+# Build executable JAR
+mvn package
+
+# Run CLI with default sample (samples/test.in)
+java -jar target/Knapsackp-1.0-SNAPSHOT.jar
+
+# Run CLI with a custom instance file
+java -jar target/Knapsackp-1.0-SNAPSHOT.jar samples/test.in
+
+# Run OneMillionRandom benchmark demo (optional directory argument to list .in files)
+java -cp target/classes edu.estu.OneMillionRandom
 ```
 
-Please notice that **long** is used here instead of **int**. 
-This is because 3240 problem instances, which can be downloaded from the [GitHub repository](https://github.com/JorikJooken/knapsackProblemInstances),
-contain large/big integer numbers that exceed the int boundary. Thus, the primitive type long is required.
+### Compiling Directly with `javac` (Main Sources)
 
-Phase 2: Implement a method that checks for the trivial case of the KP01 problem. Also write a junit test case for it.
-The method should return boolean=true when the bag that we are trying to fill is larger than the sum of the all items.
-In other words; if all items fit in to our bag, then this is a trivial problem instance since the solution is to just pick all items!
-
-Phase 3: Implement (i) a strategy that generates a random solution to the KP01 problem,
-(ii) a [greedy algorithm](https://www.geeksforgeeks.org/greedy-algorithms/) to generate a greedy solution to the KP01 problem.
-
-Random solution is a [randomized algorithm](https://www.slideshare.net/anniyappa/randomized-algorithms-ver-10), which generates different solution each time when it is run.
-Greedy solution (hint: sort descending the items according to unit price [i.e. profit/weight] ) is deterministic on the other hand.
-
-Phase 4: Generate one million random solutions and then print the best (i.e. maximum profit) of them for a given problem instance.
-Of course do not keep all solutions in the memory! Here is a pseudocode
-``` java
-long maxProfit = Long.MIN_VALUE;
-Solution best = null;
-for(int i=0;i<1_000_000_000;i++)
-{
-   Solution randomSolution = generateRandomSolution();
-   if(randomSolution.totalProfit() > maxProfit)
-   {
-        maxProfit = randomSolution.totalProfit();
-        best = randomSolution;
-   }
-}
-best.print();
-
-int max = Integer.MIN_VALULE;
-
-for(int i=0;i<n;i++)
-{
-
-if arr[i] > max
-max = arr[i];
-
-}
-
-
-int max = -1;
-
-for(int i=0;i<n;i++)
-{
-int aRandomNumber = new Random.nextInt();
-if (aRandomNumber > max)
-max = aRandomNumber;
-
-}
-
-sout max
-
-int max = -1;
-
- IntStream.range(0, 1_000_000_000).boxed().parallel().forEach(i -> {
- 
-int aRandomNumber = new Random.nextInt();
-syncohrixed(this){
-if (aRandomNumber > max)
-max = aRandomNumber;
- }
- }
-
-
-AtomicInteger max = new AtomicInteger(-1);
-
- IntStream.range(0, 1_000_000_000).boxed().parallel().forEach(i -> {
- 
-int aRandomNumber = new Random.nextInt();
-
-if (aRandomNumber > max.getPlain())
-max.set(aRandomNumber);
- }
-
-```
-Phase 5: Repeat phase 4 using parallelism (e.g. multi-threads).
-Hint: Read [atomic variables](https://www.baeldung.com/java-atomic-variables) and AtomicReference's methods. 
-
-``` java
-    public void oneMillionParallel() {
-        long maxProfit = Long.MIN_VALUE;
-        Solution best = null;
-
-        IntStream.range(0, 1_000_000_000).boxed().parallel().forEach(i -> {
-
-            Solution randomSolution = generateRandomSolution();
-            if (randomSolution.totalProfit() > maxProfit) {
-                maxProfit = randomSolution.totalProfit();
-                best = randomSolution;
-            }
-        });
-
-        best.print();
-    }
+```powershell
+javac --release 21 -encoding UTF-8 -d target/classes src/main/java/edu/estu/*.java
+java -cp target/classes edu.estu.App samples/test.in
+java -cp target/classes edu.estu.OneMillionRandom
 ```

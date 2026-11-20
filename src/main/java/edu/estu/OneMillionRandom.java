@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
@@ -12,141 +13,134 @@ import java.util.stream.Stream;
 
 /**
  * Generate one million random integers and find the maximum of them.
- * Implement both sequential and parallel version.
- * Create two variants of the parallel version: (i) using synchronized block and (ii) AtomicVariables
- * Of course be aware of any race condition in the parallel versions.
+ * Implements both sequential and parallel versions using synchronized blocks and atomic variables.
  */
 public class OneMillionRandom {
+    private static final int SAMPLE_COUNT = 1_000_000;
 
-    static void printInts(int... args){
-        for(int a : args){
+    static void printInts(int... args) {
+        for (int a : args) {
             System.out.println(a);
         }
     }
 
     public static void main(String[] args) throws IOException {
+        printInts(
+                sequential(),
+                sequentialAccum(),
+                synch(),
+                synchAccum(),
+                atomic(),
+                atomicAccum(),
+                atomic2(),
+                atomicAccum2()
+        );
 
-        printInts(sequential(),
-        sequentialAccum(),
-        synch(),
-        synchAccum(),
-        atomic(),
-        atomicAccum(),
-        atomic2(),
-        atomicAccum2());
-
-        Path root = Paths.get("/Users/iorixxx/Downloads/knapsackProblemInstances-master/problemInstances/");
-        try (Stream<Path> stream = Files.find(root, 5, (t, u) -> u.isRegularFile() && t.getFileName().toString().endsWith("in"))) {
-        stream.parallel().forEach(System.out::println);
+        if (args != null && args.length > 0) {
+            Path root = Paths.get(args[0]);
+            if (Files.isDirectory(root)) {
+                try (Stream<Path> stream = Files.find(root, 5,
+                        (path, attrs) -> attrs.isRegularFile() && path.getFileName().toString().endsWith(".in"))) {
+                    stream.parallel().forEach(System.out::println);
+                }
+            } else {
+                System.err.println("Provided directory does not exist or is not a directory: " + root);
+            }
         }
     }
 
-
     public static int sequential() {
         Random rand = new Random();
-        int max = -1;
+        int max = Integer.MIN_VALUE;
 
-        for (int i = 0; i < 1_000_000; i++) {
+        for (int i = 0; i < SAMPLE_COUNT; i++) {
             int aRandomInt = rand.nextInt();
-            if (aRandomInt > max)
+            if (aRandomInt > max) {
                 max = aRandomInt;
+            }
         }
         return max;
     }
 
     public static int sequentialAccum() {
         Random rand = new Random();
-        int max = -1;
+        int max = Integer.MIN_VALUE;
 
-        for (int i = 0; i < 1_000_000; i++) {
+        for (int i = 0; i < SAMPLE_COUNT; i++) {
             max = Math.max(max, rand.nextInt());
         }
         return max;
     }
 
-
     public static int atomic2() {
-        Random rand = new Random();
-        AtomicReference<Integer> max = new AtomicReference<>(-1);
+        AtomicReference<Integer> max = new AtomicReference<>(Integer.MIN_VALUE);
 
-        IntStream.range(0, 1_000_000).boxed().parallel().forEach(i -> {
-            max.getAndUpdate(z -> Math.max(z, rand.nextInt()));
+        IntStream.range(0, SAMPLE_COUNT).parallel().forEach(i -> {
+            int candidate = ThreadLocalRandom.current().nextInt();
+            max.getAndUpdate(z -> Math.max(z, candidate));
         });
 
         return max.get();
     }
 
     public static int atomicAccum2() {
-        Random rand = new Random();
-        AtomicReference<Integer> max = new AtomicReference<>(-1);
+        AtomicReference<Integer> max = new AtomicReference<>(Integer.MIN_VALUE);
 
-        IntStream.range(0, 1_000_000).boxed().parallel().forEach(i -> {
-            max.accumulateAndGet(rand.nextInt(), Math::max);
+        IntStream.range(0, SAMPLE_COUNT).parallel().forEach(i -> {
+            max.accumulateAndGet(ThreadLocalRandom.current().nextInt(), Math::max);
         });
 
-        return max.getPlain();
+        return max.get();
     }
 
-
     public static int synch() {
-        Random rand = new Random();
-        final Integer[] max = {-1};
+        final Object lock = new Object();
+        final int[] max = {Integer.MIN_VALUE};
 
-        IntStream.range(0, 1_000_000).boxed().parallel().forEach(i -> {
-
-
-            Integer aRandomInt = rand.nextInt();
-            synchronized (rand) {
-                if (aRandomInt > max[0])
+        IntStream.range(0, SAMPLE_COUNT).parallel().forEach(i -> {
+            int aRandomInt = ThreadLocalRandom.current().nextInt();
+            synchronized (lock) {
+                if (aRandomInt > max[0]) {
                     max[0] = aRandomInt;
+                }
             }
-
         });
 
         return max[0];
     }
 
     public static int synchAccum() {
-        Random rand = new Random();
-        final Integer[] max = {-1};
+        final Object lock = new Object();
+        final int[] max = {Integer.MIN_VALUE};
 
-        IntStream.range(0, 1_000_000).boxed().parallel().forEach(i -> {
-            synchronized (max[0]) {
-                max[0] = Math.max(max[0], rand.nextInt());
+        IntStream.range(0, SAMPLE_COUNT).parallel().forEach(i -> {
+            int aRandomInt = ThreadLocalRandom.current().nextInt();
+            synchronized (lock) {
+                max[0] = Math.max(max[0], aRandomInt);
             }
-
         });
 
         return max[0];
     }
 
     public static int atomic() {
-        Random rand = new Random();
-        AtomicInteger max = new AtomicInteger(-1);
+        AtomicInteger max = new AtomicInteger(Integer.MIN_VALUE);
 
-        IntStream.range(0, 1_000_000).boxed().parallel().forEach(i -> {
-
-            max.updateAndGet(z -> Math.max(z, rand.nextInt()));
-
-
+        IntStream.range(0, SAMPLE_COUNT).parallel().forEach(i -> {
+            int candidate = ThreadLocalRandom.current().nextInt();
+            max.updateAndGet(z -> Math.max(z, candidate));
         });
 
         return max.get();
     }
 
-    /**
-     * @return
-     */
     public static int atomicAccum() {
-        Random rand = new Random();
-        AtomicInteger max = new AtomicInteger(-1);
+        AtomicInteger max = new AtomicInteger(Integer.MIN_VALUE);
 
-        IntStream.range(0, 1_000_000).boxed().parallel().forEach(i -> {
-            max.accumulateAndGet(rand.nextInt(), Math::max);
+        IntStream.range(0, SAMPLE_COUNT).parallel().forEach(i -> {
+            max.accumulateAndGet(ThreadLocalRandom.current().nextInt(), Math::max);
         });
 
-        return max.getPlain();
+        return max.get();
     }
-
-
 }

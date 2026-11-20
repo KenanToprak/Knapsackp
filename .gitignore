@@ -23,6 +23,13 @@
 hs_err_pid*
 replay_pid*
 
-target
-.iml
-.idea
+# Build and IDE outputs
+target/
+out/
+build/
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+.DS_Store
